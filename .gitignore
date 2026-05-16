@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+dist/
+build/
+*.spec
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Misc
+.DS_Store
+Thumbs.db
+accounts.json
