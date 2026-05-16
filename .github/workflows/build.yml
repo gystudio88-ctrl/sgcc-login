@@ -33,8 +33,68 @@ jobs:
           name: windows-x64
           path: dist/账号管理.exe
 
+  build-macos-intel:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install system dependencies
+        run: |
+          brew install python-tk
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build
+        run: |
+          pyinstaller browser_launcher.py --name "账号管理-macOS-Intel" --onefile --windowed --noconfirm --clean --hidden-import customtkinter --hidden-import requests --hidden-import qrcode --hidden-import PIL
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64
+          path: dist/账号管理-macOS-Intel
+
+  build-macos-arm:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install system dependencies
+        run: |
+          brew install python-tk
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build
+        run: |
+          pyinstaller browser_launcher.py --name "账号管理-macOS-ARM" --onefile --windowed --noconfirm --clean --hidden-import customtkinter --hidden-import requests --hidden-import qrcode --hidden-import PIL
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: dist/账号管理-macOS-ARM
+
   build-linux-x64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       
@@ -46,7 +106,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk python3-dev
+          sudo apt-get install -y python3-tk python3-dev libgtk-3-dev
       
       - name: Install Python dependencies
         run: |
@@ -56,13 +116,13 @@ jobs:
       
       - name: Build
         run: |
-          pyinstaller browser_launcher.py --name "账号管理" --onefile --noconfirm --clean --hidden-import customtkinter --hidden-import requests --hidden-import qrcode --hidden-import PIL
+          pyinstaller browser_launcher.py --name "账号管理-Linux-x64" --onefile --noconfirm --clean --hidden-import customtkinter --hidden-import requests --hidden-import qrcode --hidden-import PIL
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-x64
-          path: dist/账号管理
+          path: dist/账号管理-Linux-x64
 
   build-linux-arm64:
     runs-on: ubuntu-24.04-arm
@@ -87,40 +147,30 @@ jobs:
       
       - name: Build
         run: |
-          pyinstaller browser_launcher.py --name "账号管理" --onefile --noconfirm --clean --hidden-import customtkinter --hidden-import requests --hidden-import qrcode --hidden-import PIL
+          pyinstaller browser_launcher.py --name "账号管理-Linux-ARM64" --onefile --noconfirm --clean --hidden-import customtkinter --hidden-import requests --hidden-import qrcode --hidden-import PIL
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64
-          path: dist/账号管理
+          path: dist/账号管理-Linux-ARM64
 
   release:
-    needs: [build-windows, build-linux-x64, build-linux-arm64]
+    needs: [build-windows, build-macos-intel, build-macos-arm, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download Windows artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-x64
           path: ./release
       
-      - name: Download Linux x64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-x64
-          path: ./release
-      
-      - name: Download Linux ARM64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-arm64
-          path: ./release
+      - name: List files
+        run: ls -R ./release
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./release/*
+          files: ./release/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
