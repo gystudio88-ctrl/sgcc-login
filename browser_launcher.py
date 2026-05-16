@@ -2,7 +2,6 @@
 浏览器启动器 - 检测系统浏览器并使用指定浏览器打开链接
 """
 import subprocess
-import winreg
 import os
 import sys
 import hashlib
@@ -13,6 +12,10 @@ import customtkinter as ctk
 import requests
 import qrcode
 from PIL import Image, ImageTk
+
+# 跨平台兼容
+if sys.platform == 'win32':
+    import winreg
 
 
 # 软件配置：标识 -> { salt, algorithm }
@@ -172,63 +175,88 @@ def detect_browsers():
     """检测系统已安装的浏览器"""
     browsers = {}
     
-    reg_paths = [
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Clients\StartMenuInternet"),
-        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Clients\StartMenuInternet"),
-    ]
-    
-    for hkey, path in reg_paths:
-        try:
-            with winreg.OpenKey(hkey, path) as key:
-                i = 0
-                while True:
-                    try:
-                        subkey_name = winreg.EnumKey(key, i)
-                        with winreg.OpenKey(key, subkey_name) as subkey:
-                            try:
-                                name, _ = winreg.QueryValueEx(subkey, None)
-                            except:
-                                name = subkey_name
-                            
-                            try:
-                                cmd_key = winreg.OpenKey(subkey, r"shell\open\command")
-                                cmd, _ = winreg.QueryValueEx(cmd_key, None)
-                                exe_path = cmd.strip('"').split('"')[0] if '"' in cmd else cmd.split()[0]
-                                if os.path.exists(exe_path):
-                                    browsers[name] = exe_path
-                            except:
-                                pass
-                        i += 1
-                    except OSError:
+    if sys.platform == 'win32':
+        # Windows 系统
+        reg_paths = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Clients\StartMenuInternet"),
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Clients\StartMenuInternet"),
+        ]
+        
+        for hkey, path in reg_paths:
+            try:
+                with winreg.OpenKey(hkey, path) as key:
+                    i = 0
+                    while True:
+                        try:
+                            subkey_name = winreg.EnumKey(key, i)
+                            with winreg.OpenKey(key, subkey_name) as subkey:
+                                try:
+                                    name, _ = winreg.QueryValueEx(subkey, None)
+                                except:
+                                    name = subkey_name
+                                
+                                try:
+                                    cmd_key = winreg.OpenKey(subkey, r"shell\open\command")
+                                    cmd, _ = winreg.QueryValueEx(cmd_key, None)
+                                    exe_path = cmd.strip('"').split('"')[0] if '"' in cmd else cmd.split()[0]
+                                    if os.path.exists(exe_path):
+                                        browsers[name] = exe_path
+                                except:
+                                    pass
+                            i += 1
+                        except OSError:
+                            break
+            except OSError:
+                pass
+        
+        common_paths = {
+            "Google Chrome": [
+                os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+            ],
+            "Mozilla Firefox": [
+                os.path.expandvars(r"%ProgramFiles%\Mozilla Firefox\firefox.exe"),
+                os.path.expandvars(r"%ProgramFiles(x86)%\Mozilla Firefox\firefox.exe"),
+            ],
+            "Microsoft Edge": [
+                os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+                os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+            ],
+            "Brave": [
+                os.path.expandvars(r"%LocalAppData%\BraveSoftware\Brave-Browser\Application\brave.exe"),
+            ],
+        }
+        
+        for name, paths in common_paths.items():
+            if name not in browsers:
+                for p in paths:
+                    if os.path.exists(p):
+                        browsers[name] = p
                         break
-        except OSError:
-            pass
-    
-    common_paths = {
-        "Google Chrome": [
-            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
-            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
-            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
-        ],
-        "Mozilla Firefox": [
-            os.path.expandvars(r"%ProgramFiles%\Mozilla Firefox\firefox.exe"),
-            os.path.expandvars(r"%ProgramFiles(x86)%\Mozilla Firefox\firefox.exe"),
-        ],
-        "Microsoft Edge": [
-            os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
-            os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
-        ],
-        "Brave": [
-            os.path.expandvars(r"%LocalAppData%\BraveSoftware\Brave-Browser\Application\brave.exe"),
-        ],
-    }
-    
-    for name, paths in common_paths.items():
-        if name not in browsers:
-            for p in paths:
-                if os.path.exists(p):
-                    browsers[name] = p
-                    break
+    else:
+        # Linux/macOS 系统
+        common_browsers = {
+            "Google Chrome": ["google-chrome", "google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"],
+            "Mozilla Firefox": ["firefox", "/usr/bin/firefox", "/snap/bin/firefox"],
+            "Microsoft Edge": ["microsoft-edge", "microsoft-edge-stable", "/usr/bin/microsoft-edge"],
+            "Chromium": ["chromium", "chromium-browser", "/usr/bin/chromium", "/usr/bin/chromium-browser"],
+            "Brave": ["brave", "brave-browser", "/usr/bin/brave-browser"],
+        }
+        
+        for name, cmds in common_browsers.items():
+            for cmd in cmds:
+                # 检查是否是绝对路径
+                if cmd.startswith('/'):
+                    if os.path.exists(cmd):
+                        browsers[name] = cmd
+                        break
+                else:
+                    # 检查是否在 PATH 中
+                    result = subprocess.run(['which', cmd], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        browsers[name] = result.stdout.strip()
+                        break
     
     return browsers
 
